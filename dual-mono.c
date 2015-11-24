@@ -177,6 +177,8 @@ int main(int argc, char *argv[]) {
 
 	printf("Working...\n");
 
+	div_t gain = { 1, 0 };
+
 	for (u64 i = 0; i < n_frames; ++i) {
 
 		if (aborted) {
@@ -209,17 +211,20 @@ int main(int argc, char *argv[]) {
 		if (result != 1)
 			return -1;
 
-		s32 sample = (frame[0] << 8 | frame[1] << 16 | frame[2] << 24) >> 8;
+		s32 left_sample = (frame[0] << 8 | frame[1] << 16 | frame[2] << 24) >> 8;
+		s32 right_sample = (frame[3] << 8 | frame[4] << 16 | frame[5] << 24) >> 8;
 
-		if (abs(sample) >= 0x7fffff) {
-			sample = 10 * ((frame[3] << 8 | frame[4] << 16 | frame[5] << 24) >> 8);
+		if (abs(left_sample) < 0x7fffff) {
+			gain = (right_sample != 0) ? div(left_sample, right_sample) : gain;
+		} else {
+			left_sample = gain.quot * right_sample + gain.rem;
 			++clipped_samples;
 		}
 
-		// lossless, will never clip when the the second channel is -20dB
-		sample <<= 4;
+		// lossless when second channel is at -20dB, will peak at ~98%
+		left_sample *= 23;
 
-		result = fwrite(&sample, sizeof(sample), 1, output_file);
+		result = fwrite(&left_sample, sizeof(left_sample), 1, output_file);
 		if (result != 1)
 			return -1;
 
